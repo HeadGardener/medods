@@ -29,20 +29,11 @@ type ServerConfig struct {
 }
 
 type TokensConfig struct {
-	AccessToken  AccessToken
-	RefreshToken RefreshToken
-}
+	SecretKey      string
+	AccessTokenTTL time.Duration
 
-type AccessToken struct {
-	PublicKey  string
-	PrivateKey string
-	ExpiresIn  time.Duration
-}
-
-type RefreshToken struct {
-	PublicKey  string
-	PrivateKey string
-	ExpiresIn  time.Duration
+	InitialLen      int
+	RefreshTokenTTL time.Duration
 }
 
 func Init(path string) (*Config, error) {
@@ -81,34 +72,24 @@ func Init(path string) (*Config, error) {
 		return nil, errors.New("server port is empty")
 	}
 
-	accessTokenPublicKey := os.Getenv("ACCESS_TOKEN_PUBLIC_KEY")
-	if accessTokenPublicKey == "" {
-		return nil, errors.New("access token public key is empty")
+	accessTokenSecretKey := os.Getenv("ACCESS_TOKEN_SECRET_KEY")
+	if accessTokenSecretKey == "" {
+		return nil, errors.New("access token secret key is empty")
 	}
 
-	accessTokenPrivateKey := os.Getenv("ACCESS_TOKEN_PRIVATE_KEY")
-	if accessTokenPrivateKey == "" {
-		return nil, errors.New("access token private key is empty")
-	}
-
-	accessTokenExpiresIn, err := strconv.Atoi(os.Getenv("ACCESS_TOKEN_EXPIRES_IN"))
+	accessTokenTTL, err := strconv.Atoi(os.Getenv("ACCESS_TOKEN_TTL"))
 	if err != nil {
-		return nil, fmt.Errorf("invalid access token expires in env: %w", err)
+		return nil, fmt.Errorf("invalid access token ttl: %w", err)
 	}
 
-	refreshTokenPublicKey := os.Getenv("REFRESH_TOKEN_PUBLIC_KEY")
-	if refreshTokenPublicKey == "" {
-		return nil, errors.New("access token public key is empty")
-	}
-
-	refreshTokenPrivateKey := os.Getenv("REFRESH_TOKEN_PRIVATE_KEY")
-	if refreshTokenPrivateKey == "" {
-		return nil, errors.New("access token private key is empty")
-	}
-
-	refreshTokenExpiresIn, err := strconv.Atoi(os.Getenv("REFRESH_TOKEN_EXPIRES_IN"))
+	refreshInitialLen, err := strconv.Atoi(os.Getenv("REFRESH_TOKEN_INITIAL_LEN"))
 	if err != nil {
-		return nil, fmt.Errorf("invalid access token expires in env: %w", err)
+		return nil, fmt.Errorf("invalid refresh token initial len: %w", err)
+	}
+
+	refreshTokenTTL, err := strconv.Atoi(os.Getenv("REFRESH_TOKEN_TTL"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token ttl: %w", err)
 	}
 
 	return &Config{
@@ -119,16 +100,10 @@ func Init(path string) (*Config, error) {
 			Port: serverPort,
 		},
 		TokensConfig: TokensConfig{
-			AccessToken: AccessToken{
-				PublicKey:  accessTokenPublicKey,
-				PrivateKey: accessTokenPrivateKey,
-				ExpiresIn:  time.Duration(accessTokenExpiresIn) * time.Minute,
-			},
-			RefreshToken: RefreshToken{
-				PublicKey:  refreshTokenPublicKey,
-				PrivateKey: refreshTokenPrivateKey,
-				ExpiresIn:  time.Duration(refreshTokenExpiresIn) * time.Minute,
-			},
+			SecretKey:       accessTokenSecretKey,
+			AccessTokenTTL:  time.Duration(accessTokenTTL) * time.Minute,
+			InitialLen:      refreshInitialLen,
+			RefreshTokenTTL: time.Duration(refreshTokenTTL) * time.Minute,
 		},
 	}, nil
 }
