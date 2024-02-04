@@ -1,9 +1,9 @@
 package auth
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"math/rand"
 	"time"
 
 	"github.com/HeadGardener/medods/internal/models"
@@ -68,10 +68,7 @@ func (tp *TokenProcessor) ParseAccessToken(accessToken string) (string, error) {
 func (tp *TokenProcessor) GenerateRefreshToken() (models.Session, error) {
 	b := make([]byte, tp.InitialLen)
 
-	src := rand.NewSource(time.Now().Unix())
-	r := rand.New(src)
-
-	_, err := r.Read(b)
+	_, err := rand.Read(b)
 	if err != nil {
 		return models.Session{}, err
 	}
