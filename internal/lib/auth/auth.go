@@ -6,13 +6,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/HeadGardener/medods/internal/models"
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/HeadGardener/medods/internal/config"
 )
 
-type TokenProcessor struct {
+type TokenManager struct {
 	SecretKey       []byte
 	AccessTokenTTL  time.Duration
 	InitialLen      int
@@ -24,8 +23,8 @@ type tokenClaims struct {
 	UserID string `json:"user_id"`
 }
 
-func NewTokenProcessor(conf *config.TokensConfig) (*TokenProcessor, error) {
-	return &TokenProcessor{
+func NewTokenProcessor(conf *config.TokensConfig) (*TokenManager, error) {
+	return &TokenManager{
 		SecretKey:       []byte(conf.SecretKey),
 		AccessTokenTTL:  conf.AccessTokenTTL,
 		InitialLen:      conf.InitialLen,
@@ -33,25 +32,25 @@ func NewTokenProcessor(conf *config.TokensConfig) (*TokenProcessor, error) {
 	}, nil
 }
 
-func (tp *TokenProcessor) GenerateAccessToken(userID string) (string, error) {
+func (tm *TokenManager) GenerateAccessToken(userID string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, &tokenClaims{
 		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tp.AccessTokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tm.AccessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 		userID,
 	})
 
-	return token.SignedString(tp.SecretKey)
+	return token.SignedString(tm.SecretKey)
 }
 
-func (tp *TokenProcessor) ParseAccessToken(accessToken string) (string, error) {
+func (tm *TokenManager) ParseAccessToken(accessToken string) (string, error) {
 	token, err := jwt.ParseWithClaims(accessToken, &tokenClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
 		}
 
-		return tp.SecretKey, nil
+		return tm.SecretKey, nil
 	})
 	if err != nil {
 		return "", err
@@ -65,18 +64,19 @@ func (tp *TokenProcessor) ParseAccessToken(accessToken string) (string, error) {
 	return claims.UserID, nil
 }
 
-func (tp *TokenProcessor) GenerateRefreshToken() (models.Session, error) {
-	b := make([]byte, tp.InitialLen)
+func (tm *TokenManager) GenerateRefreshToken() (string, error) {
+	b := make([]byte, tm.InitialLen)
 
 	_, err := rand.Read(b)
 	if err != nil {
-		return models.Session{}, err
+		return "", err
 	}
 
 	token := base64.StdEncoding.EncodeToString(b)
 
-	return models.Session{
-		RefreshToken: token,
-		ExpiresAt:    time.Now().Add(tp.RefreshTokenTTL),
-	}, nil
+	return token, nil
+}
+
+func (tm *TokenManager) GetRefreshTokenTTL() time.Duration {
+	return tm.RefreshTokenTTL
 }
