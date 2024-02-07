@@ -21,10 +21,9 @@ type TokenManager interface {
 }
 
 type SessionStorage interface {
-	IsUserSessionExists(ctx context.Context, userID string) bool
+	GetSession(ctx context.Context, userID string) (models.Session, error)
 	CreateUserSession(ctx context.Context, session models.Session) error
 	UpdateSession(ctx context.Context, session models.Session) error
-	GetSession(ctx context.Context, userID string) (models.Session, error)
 }
 
 type AuthService struct {
@@ -33,14 +32,14 @@ type AuthService struct {
 }
 
 func (s *AuthService) SignIn(ctx context.Context, userID string) (models.Tokens, error) {
-	if !s.sessionStorage.IsUserSessionExists(ctx, userID) {
+	if _, err := s.sessionStorage.GetSession(ctx, userID); err != nil {
 		session := models.Session{
 			UserID:       userID,
 			RefreshToken: "",
 			ExpiresAt:    time.Now(),
 		}
 
-		if err := s.sessionStorage.CreateUserSession(ctx, session); err != nil {
+		if err = s.sessionStorage.CreateUserSession(ctx, session); err != nil {
 			return models.Tokens{}, err
 		}
 	}
