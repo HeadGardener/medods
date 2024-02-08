@@ -18,9 +18,15 @@ type TokenManager struct {
 	RefreshTokenTTL time.Duration
 }
 
+type TokenAttributes struct {
+	UserID    string
+	SessionID string
+}
+
 type tokenClaims struct {
 	jwt.RegisteredClaims
-	UserID string `json:"user_id"`
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
 }
 
 func NewTokenProcessor(conf *config.TokensConfig) (*TokenManager, error) {
@@ -32,19 +38,20 @@ func NewTokenProcessor(conf *config.TokensConfig) (*TokenManager, error) {
 	}, nil
 }
 
-func (tm *TokenManager) GenerateAccessToken(userID string) (string, error) {
+func (tm *TokenManager) GenerateAccessToken(userID, sessionID string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, &tokenClaims{
 		jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tm.AccessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 		userID,
+		sessionID,
 	})
 
 	return token.SignedString(tm.SecretKey)
 }
 
-func (tm *TokenManager) ParseAccessToken(accessToken string) (string, error) {
+func (tm *TokenManager) ParseAccessTokenWithoutExpirationTime(accessToken string) (TokenAttributes, error) {
 	token, err := jwt.ParseWithClaims(accessToken, &tokenClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
@@ -52,16 +59,21 @@ func (tm *TokenManager) ParseAccessToken(accessToken string) (string, error) {
 
 		return tm.SecretKey, nil
 	})
-	if err != nil {
-		return "", err
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return TokenAttributes{}, err
 	}
 
 	claims, ok := token.Claims.(*tokenClaims)
 	if !ok {
-		return "", errors.New("token claims are not of type *tokenClaims")
+		return TokenAttributes{}, errors.New("token claims are not of type *tokenClaims")
 	}
 
-	return claims.UserID, nil
+	userAttributes := TokenAttributes{
+		UserID:    claims.UserID,
+		SessionID: claims.SessionID,
+	}
+
+	return userAttributes, nil
 }
 
 func (tm *TokenManager) GenerateRefreshToken() (string, error) {

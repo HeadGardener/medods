@@ -5,25 +5,31 @@ import (
 	"errors"
 	"time"
 
+	"github.com/HeadGardener/medods/internal/lib/auth"
 	"github.com/HeadGardener/medods/internal/lib/hash"
 	"github.com/HeadGardener/medods/internal/models"
+
+	"github.com/google/uuid"
 )
 
 var (
 	ErrNotSameRefreshToken = errors.New("invalid refresh token")
+	ErrRefreshTokenExpired = errors.New("refresh token expired")
+	ErrInvalidSession      = errors.New("tokens are not connected: invalid access token session")
 )
 
 type TokenManager interface {
-	GenerateAccessToken(userID string) (string, error)
-	ParseAccessToken(accessToken string) (string, error)
+	GenerateAccessToken(userID, sessionID string) (string, error)
+	ParseAccessTokenWithoutExpirationTime(accessToken string) (auth.TokenAttributes, error)
 	GenerateRefreshToken() (string, error)
 	GetRefreshTokenTTL() time.Duration
 }
 
 type SessionStorage interface {
-	GetSession(ctx context.Context, userID string) (models.Session, error)
+	GetSessionByUserID(ctx context.Context, userID string) (models.Session, error)
 	CreateUserSession(ctx context.Context, session models.Session) error
 	UpdateSession(ctx context.Context, session models.Session) error
+	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (models.Session, error)
 }
 
 type AuthService struct {
@@ -32,8 +38,9 @@ type AuthService struct {
 }
 
 func (s *AuthService) SignIn(ctx context.Context, userID string) (models.Tokens, error) {
-	if _, err := s.sessionStorage.GetSession(ctx, userID); err != nil {
+	if _, err := s.sessionStorage.GetSessionByUserID(ctx, userID); err != nil {
 		session := models.Session{
+			ID:           "",
 			UserID:       userID,
 			RefreshToken: "",
 			ExpiresAt:    time.Now(),
@@ -52,17 +59,30 @@ func (s *AuthService) SignIn(ctx context.Context, userID string) (models.Tokens,
 	return tokens, nil
 }
 
-func (s *AuthService) Refresh(ctx context.Context, userID, refreshToken string) (models.Tokens, error) {
-	session, err := s.sessionStorage.GetSession(ctx, userID)
+func (s *AuthService) Refresh(ctx context.Context, accessToken, refreshToken string) (models.Tokens, error) {
+	session, err := s.sessionStorage.GetSessionByRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return models.Tokens{}, err
+	}
+
+	if session.ExpiresAt.Before(time.Now()) {
+		return models.Tokens{}, ErrRefreshTokenExpired
 	}
 
 	if !hash.CompareHashAndString(session.RefreshToken, refreshToken) {
 		return models.Tokens{}, ErrNotSameRefreshToken
 	}
 
-	tokens, err := s.createSession(ctx, userID)
+	tokenAttr, err := s.tokenManager.ParseAccessTokenWithoutExpirationTime(accessToken)
+	if err != nil {
+		return models.Tokens{}, err
+	}
+
+	if tokenAttr.SessionID != session.ID {
+		return models.Tokens{}, ErrInvalidSession
+	}
+
+	tokens, err := s.createSession(ctx, session.UserID)
 	if err != nil {
 		return models.Tokens{}, err
 	}
@@ -76,7 +96,8 @@ func (s *AuthService) createSession(ctx context.Context, userID string) (models.
 		err    error
 	)
 
-	tokens.AccessToken, err = s.tokenManager.GenerateAccessToken(userID)
+	sessionID := uuid.NewString()
+	tokens.AccessToken, err = s.tokenManager.GenerateAccessToken(userID, sessionID)
 	if err != nil {
 		return models.Tokens{}, err
 	}
@@ -87,6 +108,7 @@ func (s *AuthService) createSession(ctx context.Context, userID string) (models.
 	}
 
 	session := models.Session{
+		ID:           sessionID,
 		UserID:       userID,
 		RefreshToken: hash.GetStringHash(tokens.RefreshToken),
 		ExpiresAt:    time.Now().Add(s.tokenManager.GetRefreshTokenTTL()),
