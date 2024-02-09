@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-
 	"github.com/HeadGardener/medods/internal/config"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type TokenManager struct {
@@ -29,7 +29,7 @@ type tokenClaims struct {
 	SessionID string `json:"session_id"`
 }
 
-func NewTokenProcessor(conf *config.TokensConfig) (*TokenManager, error) {
+func NewTokenManager(conf *config.TokensConfig) (*TokenManager, error) {
 	return &TokenManager{
 		SecretKey:       []byte(conf.SecretKey),
 		AccessTokenTTL:  conf.AccessTokenTTL,

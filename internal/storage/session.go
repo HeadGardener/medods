@@ -52,11 +52,11 @@ func (s *SessionStorage) UpdateSession(ctx context.Context, session models.Sessi
 	return nil
 }
 
-func (s *SessionStorage) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (models.Session, error) {
+func (s *SessionStorage) GetSessionByID(ctx context.Context, id string) (models.Session, error) {
 	var session models.Session
 
-	if err := s.coll.FindOne(ctx, bson.D{{"refresh_token", refreshToken}}).Decode(&session); err != nil {
-		return models.Session{}, fmt.Errorf("failed while getting user by token session: %w", err)
+	if err := s.coll.FindOne(ctx, bson.D{{"id", id}}).Decode(&session); err != nil {
+		return models.Session{}, fmt.Errorf("failed while getting session by id: %w", err)
 	}
 
 	return session, nil

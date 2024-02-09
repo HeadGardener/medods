@@ -29,12 +29,19 @@ type SessionStorage interface {
 	GetSessionByUserID(ctx context.Context, userID string) (models.Session, error)
 	CreateUserSession(ctx context.Context, session models.Session) error
 	UpdateSession(ctx context.Context, session models.Session) error
-	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (models.Session, error)
+	GetSessionByID(ctx context.Context, id string) (models.Session, error)
 }
 
 type AuthService struct {
 	tokenManager   TokenManager
 	sessionStorage SessionStorage
+}
+
+func NewAuthService(tokenManager TokenManager, sessionStorage SessionStorage) *AuthService {
+	return &AuthService{
+		tokenManager:   tokenManager,
+		sessionStorage: sessionStorage,
+	}
 }
 
 func (s *AuthService) SignIn(ctx context.Context, userID string) (models.Tokens, error) {
@@ -60,26 +67,22 @@ func (s *AuthService) SignIn(ctx context.Context, userID string) (models.Tokens,
 }
 
 func (s *AuthService) Refresh(ctx context.Context, accessToken, refreshToken string) (models.Tokens, error) {
-	session, err := s.sessionStorage.GetSessionByRefreshToken(ctx, refreshToken)
+	tokenAttr, err := s.tokenManager.ParseAccessTokenWithoutExpirationTime(accessToken)
 	if err != nil {
 		return models.Tokens{}, err
 	}
 
-	if session.ExpiresAt.Before(time.Now()) {
-		return models.Tokens{}, ErrRefreshTokenExpired
+	session, err := s.sessionStorage.GetSessionByID(ctx, tokenAttr.SessionID)
+	if err != nil {
+		return models.Tokens{}, err
 	}
 
 	if !hash.CompareHashAndString(session.RefreshToken, refreshToken) {
 		return models.Tokens{}, ErrNotSameRefreshToken
 	}
 
-	tokenAttr, err := s.tokenManager.ParseAccessTokenWithoutExpirationTime(accessToken)
-	if err != nil {
-		return models.Tokens{}, err
-	}
-
-	if tokenAttr.SessionID != session.ID {
-		return models.Tokens{}, ErrInvalidSession
+	if session.ExpiresAt.Before(time.Now()) {
+		return models.Tokens{}, ErrRefreshTokenExpired
 	}
 
 	tokens, err := s.createSession(ctx, session.UserID)

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -39,7 +40,7 @@ type TokensConfig struct {
 func Init(path string) (*Config, error) {
 	err := godotenv.Load(path)
 	if err != nil {
-		return nil, fmt.Errorf("invalid path: %s", path)
+		log.Printf("[INFO] can't find env file on path: %s", path)
 	}
 
 	dbName := os.Getenv("DATABASE_NAME")
@@ -94,7 +95,11 @@ func Init(path string) (*Config, error) {
 
 	return &Config{
 		DBConfig: DBConfig{
-			URL: dbURL,
+			DBName:     dbName,
+			Collection: coll,
+			URL:        dbURL,
+			Username:   dbUsername,
+			Password:   dbPassword,
 		},
 		ServerConfig: ServerConfig{
 			Port: serverPort,
